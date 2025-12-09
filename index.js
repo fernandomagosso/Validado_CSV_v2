@@ -86,7 +86,7 @@ const tourSteps = [
     {
         elementId: 'tour-step-5',
         title: 'Controles da IA',
-        text: 'Depois de carregar os dados e configurar um layout, use os botões na barra lateral para executar validações e análises com a IA.'
+        text: 'Depois de carregar os dados e configurar um layout, use os botões nesta seção para executar validações e análises com a IA.'
     }
 ];
 
@@ -512,7 +512,7 @@ async function handleDownloadZip() {
             const row = csvData[i];
             const mappedData = getMappedData(row);
 
-            const doc = new docxtemplater(new PizZip(templateFileContent), {
+            const doc = new docxtemplater(new window.PizZip(templateFileContent), {
                 paragraphLoop: true,
                 linebreaks: true,
             });
@@ -726,7 +726,7 @@ async function startFieldMappingProcess() {
 
 function extractPlaceholdersFromDoc(fileBuffer) {
     try {
-        const zip = new PizZip(fileBuffer);
+        const zip = new window.PizZip(fileBuffer);
         const doc = new docxtemplater(zip, {
             paragraphLoop: true,
             linebreaks: true,
@@ -922,7 +922,7 @@ async function getPreviewHtml(row) {
     if (layoutMode === 'template' && templateFileContent) {
         try {
             const mappedData = getMappedData(row);
-            const doc = new docxtemplater(new PizZip(templateFileContent), {
+            const doc = new docxtemplater(new window.PizZip(templateFileContent), {
                 paragraphLoop: true,
                 linebreaks: true,
             });
@@ -1039,9 +1039,10 @@ function handleApiError(error) {
     console.error("Gemini API Error:", error);
     const message = error.toString().toLowerCase();
     
-    // Check for common API key / quota error messages
-    if (message.includes('quota') || message.includes('api key not valid') || message.includes('api_key')) {
-        showToast('Chave da API inválida ou cota excedida. Por favor, insira uma nova chave.', 'error');
+    if (message.includes('quota') || message.includes('resource_exhausted')) {
+        showToast('Cota da API excedida. Verifique seu plano e detalhes de faturamento.', 'error');
+    } else if (message.includes('api key not valid') || message.includes('api_key')) {
+        showToast('Chave da API inválida. Por favor, insira uma nova chave.', 'error');
         apiKey = '';
         ai = null;
         sessionStorage.removeItem('geminiApiKey');
@@ -1103,7 +1104,7 @@ function startTour() {
 }
 
 function endTour() {
-    const currentElement = document.getElementById(tourSteps[currentTourStep].elementId);
+    const currentElement = document.querySelector('.tour-highlight');
     currentElement?.classList.remove('tour-highlight');
     tourOverlay.style.display = 'none';
     sessionStorage.setItem('tourShown', 'true');
@@ -1126,17 +1127,12 @@ function prevTourStep() {
 }
 
 function showTourStep(stepIndex) {
-    // Remove highlight from previous step
-    if (stepIndex > 0) {
-        document.getElementById(tourSteps[stepIndex - 1].elementId)?.classList.remove('tour-highlight');
-    }
-    if (stepIndex < tourSteps.length -1 ) {
-         document.getElementById(tourSteps[stepIndex + 1].elementId)?.classList.remove('tour-highlight');
-    }
-
+    // Remove highlight from any previous step
+    const highlightedElement = document.querySelector('.tour-highlight');
+    highlightedElement?.classList.remove('tour-highlight');
 
     const step = tourSteps[stepIndex];
-    const targetElement = document.getElementById(step.elementId);
+    const targetElement = document.querySelector(`[data-tour-id="${step.elementId}"]`);
 
     if (!targetElement) {
         console.error(`Tour element not found: ${step.elementId}`);
