@@ -302,56 +302,68 @@ async function handleAiPrompt() {
     
     clearAllValidationHighlights();
 
-    const schema = {
-        type: Type.ARRAY,
-        items: {
-            type: Type.OBJECT,
-            properties: {
-                fieldName: { type: Type.STRING },
-                suggestion: { type: Type.STRING },
-            },
-            required: ["fieldName", "suggestion"],
-        },
-    };
-
-    const runValidationOnRow = async (rowData) => {
-        const fullPrompt = `
-            Given this JSON data for a single record: ${JSON.stringify(rowData, null, 2)}.
-            And this validation instruction from the user: "${prompt}".
-            Please analyze the data based on the instruction.
-            Respond ONLY with a JSON array of objects. Each object in the array should represent a validation error and have TWO keys:
-            1. "fieldName": The exact key from the JSON with the error.
-            2. "suggestion": A brief explanation of the error and how to fix it.
-            If there are no errors, return an empty array [].
-        `;
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: fullPrompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: schema,
-                temperature: 0.1,
-                systemInstruction: "Você é um especialista em UX com foco em frontend, retornando apenas o JSON solicitado.",
-            },
-        });
-        return JSON.parse(response.text);
-    };
-
     try {
         let allResults = [];
         if (previewMode === 'single') {
-            const validationErrors = await runValidationOnRow(csvData[activeRowIndex]);
+            // Logic for single row validation
+            const schema = {
+                type: Type.ARRAY,
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        fieldName: { type: Type.STRING },
+                        suggestion: { type: Type.STRING },
+                    },
+                    required: ["fieldName", "suggestion"],
+                },
+            };
+            const rowData = csvData[activeRowIndex];
+            const fullPrompt = `
+                Given this JSON data for a single record: ${JSON.stringify(rowData, null, 2)}.
+                And this validation instruction from the user: "${prompt}".
+                Please analyze the data based on the instruction.
+                Respond ONLY with a JSON array of objects. Each object represents a validation error with "fieldName" and "suggestion".
+                If no errors, return an empty array [].
+            `;
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: fullPrompt,
+                config: { responseMimeType: "application/json", responseSchema: schema, temperature: 0.1 },
+            });
+            const validationErrors = JSON.parse(response.text);
             if (validationErrors.length > 0) {
                  allResults = validationErrors.map(error => ({ ...error, rowIndex: activeRowIndex }));
             }
-        } else { // previewMode === 'bulk'
-            const validationPromises = csvData.map((row, index) => 
-                runValidationOnRow(row).then(errors => 
-                    errors.map(error => ({ ...error, rowIndex: index }))
-                )
-            );
-            const nestedResults = await Promise.all(validationPromises);
-            allResults = nestedResults.flat();
+        } else { 
+            // Optimized logic for bulk validation (one API call)
+            const schema = {
+                type: Type.ARRAY,
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        rowIndex: { type: Type.INTEGER },
+                        fieldName: { type: Type.STRING },
+                        suggestion: { type: Type.STRING },
+                    },
+                    required: ["rowIndex", "fieldName", "suggestion"],
+                },
+            };
+            const fullPrompt = `
+                Given this JSON array of records: ${JSON.stringify(csvData, null, 2)}.
+                And this validation instruction from the user: "${prompt}".
+                Analyze EVERY record in the array based on the instruction.
+                Respond ONLY with a JSON array of objects. Each object represents a single validation error and MUST have THREE keys:
+                1. "rowIndex": The original 0-based index of the record with the error.
+                2. "fieldName": The exact key from the record with the error.
+                3. "suggestion": A brief explanation of the error and how to fix it.
+                If there are no errors in any records, return an empty array [].
+            `;
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: fullPrompt,
+                config: { responseMimeType: "application/json", responseSchema: schema, temperature: 0.1 },
+            });
+            allResults = JSON.parse(response.text);
         }
         
         applyValidationToPreview(allResults);
