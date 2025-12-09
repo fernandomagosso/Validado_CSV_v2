@@ -22,6 +22,8 @@ const aiControls = document.getElementById('ai-controls');
 const runAiBtn = document.getElementById('runAi');
 const downloadCsvBtn = document.getElementById('downloadCsv');
 const downloadDocBtn = document.getElementById('downloadDoc');
+const clearDataBtn = document.getElementById('clearDataBtn');
+const clearLayoutBtn = document.getElementById('clearLayoutBtn');
 const dataGridContainer = document.getElementById('data-grid-container');
 const docPreviewContent = document.getElementById('doc-preview-content');
 const aiOutputContainer = document.getElementById('ai-output-container');
@@ -44,6 +46,11 @@ const aiLayoutInstructions = document.getElementById('aiLayoutInstructions');
 const aiTransformRulesSection = document.getElementById('ai-transform-rules-section');
 const aiTransformRulesTextarea = document.getElementById('aiTransformRulesTextarea');
 const applyTransformRulesBtn = document.getElementById('applyTransformRulesBtn');
+const generateAnalysisBtn = document.getElementById('generateAnalysisBtn');
+const analysisModalOverlay = document.getElementById('analysis-modal-overlay');
+const analysisSummaryContent = document.getElementById('analysis-summary-content');
+const analysisChartContent = document.getElementById('analysis-chart-content');
+const closeAnalysisModalBtn = document.getElementById('close-analysis-modal-btn');
 
 
 // --- INITIALIZATION ---
@@ -56,6 +63,7 @@ function initializeApp() {
     console.log("API Key loaded from session.");
   }
   addEventListeners();
+  updateButtonStates();
 }
 
 // --- EVENT LISTENERS ---
@@ -69,11 +77,15 @@ function addEventListeners() {
   runAiBtn.addEventListener('click', showAiPromptModal);
   downloadCsvBtn.addEventListener('click', handleDownloadCsv);
   downloadDocBtn.addEventListener('click', handleDownloadZip);
+  clearDataBtn.addEventListener('click', handleClearData);
+  clearLayoutBtn.addEventListener('click', handleClearLayout);
   confirmMappingBtn.addEventListener('click', handleMappingConfirmation);
   cancelMappingBtn.addEventListener('click', () => mappingModalOverlay.style.display = 'none');
   confirmAiPromptBtn.addEventListener('click', handleAiPrompt);
   cancelAiPromptBtn.addEventListener('click', () => aiPromptModalOverlay.style.display = 'none');
   applyTransformRulesBtn.addEventListener('click', handleApplyTransformRules);
+  generateAnalysisBtn.addEventListener('click', handleGenerateAnalysis);
+  closeAnalysisModalBtn.addEventListener('click', () => analysisModalOverlay.style.display = 'none');
 }
 
 // --- HANDLER FUNCTIONS ---
@@ -85,6 +97,7 @@ function handleSaveApiKey() {
     sessionStorage.setItem('geminiApiKey', apiKey);
     ai = new GoogleGenAI({ apiKey });
     showToast('Chave API salva com sucesso.');
+    document.getElementById('api-section').classList.remove('needs-attention');
     console.log("API Key saved.");
   } else {
     showToast('Por favor, insira uma chave API válida.', 'error');
@@ -107,10 +120,8 @@ async function handleCsvUpload(event) {
     docPreviewContent.innerHTML = '';
     docPreviewContent.appendChild(modeChoiceContainer);
 
-    aiControls.style.display = 'block';
-    downloadCsvBtn.disabled = false;
-    checkDownloadDocState();
     showToast('Arquivo CSV carregado com sucesso.');
+    updateButtonStates();
   };
   reader.readAsText(file);
   event.target.value = ''; // Reset input so the same file can be reloaded
@@ -168,7 +179,6 @@ function handleLayoutChoice(choice, event = null) {
         reader.onload = async (e) => {
             templateFileContent = e.target.result;
             layoutMode = 'template';
-            checkDownloadDocState();
             console.log("Template file loaded.");
             showToast('Arquivo de modelo carregado.');
             layoutConfigModalOverlay.style.display = 'none';
@@ -177,6 +187,7 @@ function handleLayoutChoice(choice, event = null) {
         reader.readAsArrayBuffer(file);
         event.target.value = ''; // Reset input
     }
+    updateButtonStates();
 }
 
 function handleChangeMode() {
@@ -265,6 +276,8 @@ async function handleAiPrompt() {
             config: {
                 responseMimeType: "application/json",
                 responseSchema: schema,
+                temperature: 0.1,
+                systemInstruction: "Você é um especialista em UX com foco em frontend, retornando apenas o JSON solicitado.",
             },
         });
         return JSON.parse(response.text);
@@ -290,9 +303,8 @@ async function handleAiPrompt() {
         applyValidationToPreview(allResults);
 
     } catch (error) {
-        console.error("Error with Gemini API validation:", error);
-        aiOutputContent.textContent = `Ocorreu um erro ao validar os dados. Verifique sua chave e a conexão.\n\n${error.message}`;
-        showToast('Erro ao executar a validação da IA.', 'error');
+        handleApiError(error);
+        aiOutputContent.textContent = `Ocorreu um erro ao validar os dados.`;
     } finally {
         confirmAiPromptBtn.disabled = false;
         confirmAiPromptBtn.textContent = 'Validar';
@@ -349,6 +361,8 @@ async function handleApplyTransformRules() {
             config: {
                 responseMimeType: "application/json",
                 responseSchema: schema,
+                temperature: 0.1,
+                systemInstruction: "Você é um especialista em UX e limpeza de dados com foco em frontend, retornando apenas o JSON solicitado.",
             },
         });
 
@@ -362,8 +376,7 @@ async function handleApplyTransformRules() {
         showToast('Regras de transformação aplicadas com sucesso!', 'success');
         
     } catch (error) {
-        console.error("Error applying transform rules:", error);
-        showToast(`Erro ao aplicar regras: ${error.message}`, 'error');
+        handleApiError(error);
     } finally {
         applyTransformRulesBtn.disabled = false;
         applyTransformRulesBtn.textContent = 'Aplicar Regras';
@@ -486,6 +499,128 @@ async function handleDownloadZip() {
     }
 }
 
+function handleClearData() {
+    csvData = [];
+    csvHeaders = [];
+    renderDataTable(); 
+    resetPreviewState(); 
+
+    docPreviewContent.innerHTML = '';
+    docPreviewContent.appendChild(welcomeMessage);
+    welcomeMessage.style.display = 'flex';
+    modeChoiceContainer.style.display = 'none';
+    
+    aiOutputContainer.style.display = 'none';
+    aiOutputContent.textContent = '';
+    
+    showToast('Base de dados limpa.');
+    updateButtonStates();
+}
+
+function handleClearLayout() {
+    const wasInPreview = !!layoutMode;
+    resetPreviewState();
+
+    if (wasInPreview && csvData.length > 0) {
+        welcomeMessage.style.display = 'none';
+        modeChoiceContainer.style.display = 'flex';
+        docPreviewContent.innerHTML = '';
+        docPreviewContent.appendChild(modeChoiceContainer);
+
+        const currentActiveRow = dataGridContainer.querySelector('.data-table tbody tr.active');
+        currentActiveRow?.classList.remove('active');
+    }
+    
+    showToast('Configuração de layout limpa.');
+    updateButtonStates();
+}
+
+async function handleGenerateAnalysis() {
+    if (!ai) {
+        showToast('Por favor, salve sua chave da API Gemini primeiro.', 'error');
+        return;
+    }
+    if (csvData.length === 0) {
+        showToast('Carregue um arquivo CSV para gerar uma análise.', 'error');
+        return;
+    }
+    
+    analysisModalOverlay.style.display = 'flex';
+    analysisSummaryContent.innerHTML = '<p>Analisando dados...</p>';
+    analysisChartContent.innerHTML = '';
+    
+    const schema = {
+        type: Type.OBJECT,
+        properties: {
+            summary: { type: Type.STRING },
+            chartData: {
+                type: Type.OBJECT,
+                properties: {
+                    title: { type: Type.STRING },
+                    labelHeader: { type: Type.STRING },
+                    valueHeader: { type: Type.STRING },
+                    data: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                label: { type: Type.STRING },
+                                value: { type: Type.NUMBER },
+                            },
+                            required: ["label", "value"],
+                        },
+                    },
+                },
+                 required: ["title", "labelHeader", "valueHeader", "data"],
+            },
+        },
+        required: ["summary", "chartData"],
+    };
+
+    const prompt = `
+        Aja como um analista de dados e especialista em visualização.
+        Aqui está um conjunto de dados em formato JSON: ${JSON.stringify(csvData.slice(0, 50))}
+        (Nota: apenas as primeiras 50 linhas foram fornecidas para a análise, mas assuma que elas são representativas do conjunto completo).
+
+        Sua tarefa é realizar duas coisas:
+
+        1.  **Criar um Resumo Executivo:** Analise os dados e escreva um resumo conciso em HTML (usando <p>, <ul>, <li>, <strong>) destacando:
+            - A qualidade geral dos dados (ex: campos vazios, inconsistências).
+            - Principais insights ou tendências observadas.
+            - Estatísticas interessantes (ex: valor médio de uma coluna numérica, o item mais frequente em uma coluna categórica).
+
+        2.  **Sugerir um Gráfico:** Identifique a melhor visualização para um gráfico de barras a partir destes dados. Para isso:
+            - Escolha UMA coluna categórica (para os rótulos do gráfico).
+            - Escolha UMA coluna numérica (para os valores do gráfico). Se não houver uma coluna numérica óbvia, você deve fazer uma contagem de frequência da coluna categórica que escolheu.
+            - Crie um título claro para o gráfico.
+            - Agrupe os dados se necessário (ex: some os valores para categorias repetidas).
+
+        Responda APENAS com um único objeto JSON que corresponda ao esquema fornecido. Não inclua texto explicativo fora do JSON.
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: schema,
+                temperature: 0.1,
+                systemInstruction: "Você é um especialista em UX e análise de dados, retornando apenas o JSON estruturado solicitado.",
+            },
+        });
+
+        const result = JSON.parse(response.text);
+        analysisSummaryContent.innerHTML = result.summary;
+        renderBarChart(result.chartData);
+
+    } catch (error) {
+        handleApiError(error);
+        analysisSummaryContent.innerHTML = `<p style="color: var(--error-color);">Ocorreu um erro ao gerar a análise.</p>`;
+    }
+}
+
+
 // --- PREVIEW LOGIC ---
 
 async function renderSinglePreview(rowIndex) {
@@ -538,8 +673,8 @@ async function startFieldMappingProcess() {
         showMappingModal(placeholders, csvHeaders, aiSuggestions);
 
     } catch (error) {
-        console.error("Error during mapping process:", error);
-        mappingFormContainer.innerHTML = `<p style="color: var(--error-color);">Ocorreu um erro: ${error.message}</p>`;
+        handleApiError(error);
+        mappingFormContainer.innerHTML = `<p style="color: var(--error-color);">Ocorreu um erro ao se comunicar com a IA.</p>`;
         layoutConfigPromise.reject?.();
     }
 }
@@ -595,12 +730,14 @@ async function getAiFieldMapping(placeholders, headers) {
             config: {
                 responseMimeType: "application/json",
                 responseSchema: schema,
+                temperature: 0.1,
+                systemInstruction: "Você é um especialista em UX com foco em frontend, especialista em mapeamento de dados. Retorne apenas o JSON solicitado.",
             },
         });
         return JSON.parse(response.text);
     } catch(error) {
         console.error("AI Mapping Error:", error);
-        throw new Error("A IA falhou ao sugerir o mapeamento. Tente novamente.");
+        throw error; // Re-throw original error to be handled by the caller
     }
 }
 
@@ -645,6 +782,7 @@ function handleMappingConfirmation() {
     showToast('Mapeamento de campos confirmado.');
     
     aiTransformRulesSection.style.display = 'block'; // Show transform rules section
+    updateButtonStates();
     layoutConfigPromise.resolve?.(true);
 }
 
@@ -673,7 +811,7 @@ function resetPreviewState() {
     changeModeBtn.style.display = 'none';
     docPreviewContent.parentElement.classList.remove('bulk-preview-wrapper');
     aiTransformRulesSection.style.display = 'none';
-    checkDownloadDocState();
+    updateButtonStates();
 }
 
 function parseCsv(text) {
@@ -698,6 +836,12 @@ function renderDataTable() {
     const table = dataGridContainer.querySelector('.data-table');
     const thead = table.querySelector('thead');
     const tbody = table.querySelector('tbody');
+
+    if (csvData.length === 0) {
+        thead.innerHTML = '';
+        tbody.innerHTML = `<tr><td class="placeholder-cell">Carregue um arquivo CSV para visualizar os dados aqui.</td></tr>`;
+        return;
+    }
 
     thead.innerHTML = `<tr><th style="min-width: 60px;">#</th>${csvHeaders.map(h => `<th>${h}</th>`).join('')}</tr>`;
 
@@ -773,20 +917,39 @@ async function getPreviewHtml(row) {
                 Dados JSON:
                 ${dataJson}
             `;
-            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: prompt,
+                config: {
+                    temperature: 0.1,
+                    systemInstruction: "Você é um especialista em UX com foco em frontend e design de documentos. Retorne apenas o código HTML solicitado.",
+                }
+            });
             return response.text.trim().replace(/^```html\s*|```\s*$/g, '');
         } catch (error) {
-            console.error("Error with AI preview:", error);
-            return `<p style="color: red;">Erro na API ao gerar pré-visualização.</p>`;
+            handleApiError(error);
+            return `<p style="color: red;">Erro na API ao gerar pré-visualização. Verifique sua chave.</p>`;
         }
     }
     return '';
 }
 
-function checkDownloadDocState() {
-    const canDownloadZip = csvData.length > 0 && templateFileContent && layoutMode === 'template' && Object.keys(fieldMapping).length > 0;
+function updateButtonStates() {
+    const hasCsvData = csvData.length > 0;
+    const hasLayout = !!layoutMode;
+    const canDownloadZip = hasCsvData && templateFileContent && layoutMode === 'template' && Object.keys(fieldMapping).length > 0;
+
+    downloadCsvBtn.disabled = !hasCsvData;
+    runAiBtn.disabled = !hasCsvData || !hasLayout;
     downloadDocBtn.disabled = !canDownloadZip;
+    clearDataBtn.disabled = !hasCsvData;
+    clearLayoutBtn.disabled = !hasLayout;
+    generateAnalysisBtn.disabled = !hasCsvData;
+    
+    const canApplyTransform = hasCsvData && layoutMode === 'template' && Object.keys(fieldMapping).length > 0;
+    applyTransformRulesBtn.disabled = !canApplyTransform;
 }
+
 
 function showToast(message, type = 'success', duration = 3000) {
     const container = document.getElementById('toast-container');
@@ -826,6 +989,66 @@ function clearAllValidationHighlights() {
         field.parentNode.replaceChild(cleanField, field);
     });
 }
+
+function handleApiError(error) {
+    console.error("Gemini API Error:", error);
+    const message = error.toString().toLowerCase();
+    
+    // Check for common API key / quota error messages
+    if (message.includes('quota') || message.includes('api key not valid') || message.includes('api_key')) {
+        showToast('Chave da API inválida ou cota excedida. Por favor, insira uma nova chave.', 'error');
+        apiKey = '';
+        ai = null;
+        sessionStorage.removeItem('geminiApiKey');
+        apiKeyInput.value = '';
+        
+        const apiSection = document.getElementById('api-section');
+        apiSection.classList.add('needs-attention');
+        apiKeyInput.focus();
+    } else {
+        showToast(`Ocorreu um erro na API: ${error.message}`, 'error');
+    }
+}
+
+function renderBarChart(chartData) {
+    analysisChartContent.innerHTML = ''; // Clear previous chart
+    if (!chartData || !chartData.data || chartData.data.length === 0) {
+        analysisChartContent.innerHTML = '<p>Não foi possível gerar um gráfico para estes dados.</p>';
+        return;
+    }
+
+    const titleEl = document.createElement('h4');
+    titleEl.className = 'chart-title';
+    titleEl.textContent = chartData.title;
+    analysisChartContent.appendChild(titleEl);
+
+    const maxValue = Math.max(...chartData.data.map(item => item.value));
+    
+    chartData.data.forEach(item => {
+        const rowEl = document.createElement('div');
+        rowEl.className = 'chart-bar-row';
+        
+        const labelEl = document.createElement('div');
+        labelEl.className = 'chart-label';
+        labelEl.textContent = item.label;
+        labelEl.title = item.label;
+
+        const barContainerEl = document.createElement('div');
+        barContainerEl.className = 'chart-bar-container';
+
+        const barEl = document.createElement('div');
+        barEl.className = 'chart-bar';
+        const barWidth = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
+        barEl.style.width = `${barWidth}%`;
+        barEl.textContent = item.value.toLocaleString('pt-BR');
+
+        barContainerEl.appendChild(barEl);
+        rowEl.appendChild(labelEl);
+        rowEl.appendChild(barContainerEl);
+        analysisChartContent.appendChild(rowEl);
+    });
+}
+
 
 // --- START ---
 initializeApp();

@@ -410,6 +410,16 @@ textarea {
     z-index: 11;
 }
 
+.control-section.needs-attention {
+    border: 2px solid var(--error-color);
+    border-radius: var(--border-radius);
+    padding: 1rem;
+    margin: -1rem -1rem 1.5rem -1rem;
+    background-color: rgba(244, 67, 54, 0.1);
+    transition: all 0.3s ease-in-out;
+}
+
+
 /* --- Modal Styles --- */
 .modal-overlay {
     position: fixed;
@@ -435,6 +445,10 @@ textarea {
     max-height: 80vh;
     display: flex;
     flex-direction: column;
+}
+
+.modal-content.large {
+    max-width: 1000px;
 }
 
 .modal-content h2 {
@@ -516,6 +530,93 @@ textarea {
 .modal-footer .btn {
     width: auto;
 }
+
+/* --- Analysis Modal Styles --- */
+.analysis-content-wrapper {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    overflow-y: auto;
+    padding: 1rem 0;
+    margin-bottom: 1.5rem;
+}
+
+#analysis-summary-container, #analysis-chart-container {
+    display: flex;
+    flex-direction: column;
+}
+
+#analysis-summary-container h3, #analysis-chart-container h3 {
+    margin-bottom: 1rem;
+    color: var(--text-color-light);
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.5rem;
+}
+
+#analysis-summary-content {
+    line-height: 1.7;
+    font-size: 0.95rem;
+}
+#analysis-summary-content p {
+    margin-bottom: 1rem;
+}
+#analysis-summary-content ul {
+    list-style-position: inside;
+    padding-left: 0.5rem;
+}
+#analysis-summary-content li {
+    margin-bottom: 0.5rem;
+}
+#analysis-summary-content strong {
+    color: var(--primary-color);
+}
+
+#analysis-chart-content {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.chart-title {
+    font-size: 1rem;
+    font-weight: 500;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+.chart-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+.chart-label {
+    flex-shrink: 0;
+    width: 120px;
+    text-align: right;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.chart-bar-container {
+    flex-grow: 1;
+    background-color: var(--surface-color);
+    border-radius: var(--border-radius);
+    height: 25px;
+}
+.chart-bar {
+    background-color: var(--primary-color);
+    height: 100%;
+    border-radius: var(--border-radius);
+    transition: width 0.5s ease-out;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 0.5rem;
+    color: var(--text-color-light);
+    font-size: 0.8rem;
+}
+
 
 /* --- Toast Notification Styles --- */
 #toast-container {
