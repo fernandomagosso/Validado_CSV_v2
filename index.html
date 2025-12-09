@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Validador e Processador de Documentos com IA</title>
+    <link rel="stylesheet" href="index.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pizzip/3.1.4/pizzip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/docxtemplater/3.34.1/docxtemplater.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root">
+      <header class="app-header">
+        <h1 class="header-title">Processador de Documentos</h1>
+        <div class="header-actions">
+          <label for="csvFile" class="btn btn-secondary">Carregar CSV</label>
+          <input type="file" id="csvFile" accept=".csv, .txt" style="display: none;">
+          <button id="downloadCsv" class="btn btn-secondary" disabled>Baixar CSV</button>
+          <button id="downloadDoc" class="btn" disabled>Baixar Documentos</button>
+        </div>
+      </header>
+
+      <div class="app-body">
+        <aside class="sidebar">
+          <header class="sidebar-header">
+            <h2>Configurações e IA</h2>
+          </header>
+          
+          <section class="control-section" id="api-section">
+            <label for="apiKey">Chave da API Gemini</label>
+            <div class="api-input-group">
+              <input type="password" id="apiKey" placeholder="Insira sua chave API">
+              <button id="saveApiKey" class="btn btn-secondary">Salvar</button>
+            </div>
+          </section>
+          
+          <section class="control-section" id="ai-controls" style="display: none;">
+              <label>Validação com IA</label>
+              <button id="runAi" class="btn full-width">Executar Validação</button>
+          </section>
+
+          <section class="control-section" id="ai-transform-rules-section" style="display: none;">
+            <label for="aiTransformRulesTextarea">Regras de Transformação (IA)</label>
+            <p class="section-description">Aplique formatação e regras a todos os dados do CSV de uma vez.</p>
+            <textarea id="aiTransformRulesTextarea" placeholder="Ex: Formate todas as datas para DD/MM/AAAA. Garanta que a coluna 'Valor' seja BRL."></textarea>
+            <button id="applyTransformRulesBtn" class="btn full-width">Aplicar Regras</button>
+          </section>
+
+        </aside>
+
+        <main class="main-content">
+          <div id="main-view-container" class="split-view">
+              <div id="data-grid-container" class="panel">
+                  <div class="panel-header">
+                      <h3>Dados Editáveis</h3>
+                  </div>
+                  <div class="table-wrapper">
+                      <table class="data-table">
+                          <thead></thead>
+                          <tbody>
+                              <tr>
+                                  <td class="placeholder-cell">Carregue um arquivo CSV para visualizar os dados aqui.</td>
+                              </tr>
+                          </tbody>
+                      </table>
+                  </div>
+              </div>
+              <div id="doc-preview-container" class="panel">
+                  <div class="panel-header">
+                      <h3>Pré-visualização do Documento</h3>
+                      <button id="changeModeBtn" class="btn btn-secondary" style="display: none;">Alterar Modo</button>
+                  </div>
+                  <div id="doc-preview-content" class="panel-content">
+                      <div class="welcome-message">
+                          <svg class="welcome-icon" width="128" height="128" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M4 7V17M8 11V17M12 4V17M16 14V17M20 9V17" stroke="#3e3e3e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                              <path d="M4 4H20" stroke="#007acc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                          </svg>
+                          <h1>Processador Universal de CSVs</h1>
+                          <p>Comece carregando um arquivo CSV no header para ver seus dados.</p>
+                      </div>
+                       <div id="mode-choice-container" style="display: none;">
+                          <h2>Como deseja pré-visualizar?</h2>
+                          <button id="bulk-preview-btn" class="btn">Pré-visualizar Todos os Registros</button>
+                          <p>Ou clique em uma linha na grade para visualizar individualmente.</p>
+                      </div>
+                  </div>
+              </div>
+          </div>
+          <div id="ai-output-container" class="ai-output-container" style="display: none;">
+              <h3>Análise da IA</h3>
+              <div id="ai-output-content"></div>
+          </div>
+        </main>
+      </div>
+
+      <!-- Layout Config Modal -->
+      <div id="layout-config-modal-overlay" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2>Como deseja visualizar este documento?</h2>
+            <p>Escolha um método para gerar a pré-visualização.</p>
+            <div class="layout-options-container">
+              <div class="layout-option">
+                  <h4>Sugerir Layout com IA</h4>
+                  <div class="control-section">
+                      <label for="aiLayoutInstructions">Instruções (Opcional)</label>
+                      <textarea id="aiLayoutInstructions" placeholder="Ex: Crie um layout de fatura, com logo no topo..."></textarea>
+                  </div>
+                  <button id="useAiLayoutBtn" class="btn full-width">Gerar com IA</button>
+              </div>
+              <div class="layout-option-divider">OU</div>
+              <div class="layout-option">
+                  <h4>Usar Modelo Próprio</h4>
+                  <label for="templateFileInputHidden" class="btn btn-secondary full-width">Carregar Arquivo .docx</label>
+                  <input type="file" id="templateFileInputHidden" accept=".docx" style="display: none;">
+              </div>
+            </div>
+        </div>
+      </div>
+
+      <!-- Field Mapping Modal -->
+      <div id="mapping-modal-overlay" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2>Mapeamento de Campos</h2>
+            <p>A IA sugeriu as correspondências abaixo. Revise e confirme para continuar.</p>
+            <div id="mapping-form-container" class="mapping-form">
+                <!-- Mapping rows will be inserted here by JS -->
+            </div>
+            <div class="modal-footer">
+                <button id="cancel-mapping-btn" class="btn btn-secondary">Cancelar</button>
+                <button id="confirm-mapping-btn" class="btn">Confirmar Mapeamento</button>
+            </div>
+        </div>
+      </div>
+
+      <!-- AI Prompt Modal -->
+      <div id="ai-prompt-modal-overlay" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2>Instruções de Validação para IA</h2>
+            <p>Digite as regras para validação dos dados da linha selecionada. Ex: "Verifique se o CPF é válido" ou "O campo Status só pode ser 'Ativo' ou 'Inativo'".</p>
+            <div class="control-section">
+                <textarea id="aiPromptTextarea" placeholder="Digite sua instrução aqui..." style="min-height: 120px;"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button id="cancel-ai-prompt-btn" class="btn btn-secondary">Cancelar</button>
+                <button id="confirm-ai-prompt-btn" class="btn">Validar</button>
+            </div>
+        </div>
+      </div>
+
+
+      <!-- Toast Notification Container -->
+      <div id="toast-container"></div>
+    </div>
+    <!-- Main Application Script -->
+    <script type="module" src="index.js"></script>
+  </body>
+</html>
