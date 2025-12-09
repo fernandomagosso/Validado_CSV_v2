@@ -12,6 +12,7 @@ let previewMode = null; // 'single' or 'bulk'
 let fieldMapping = {}; // Stores the confirmed mapping from template placeholder to CSV header
 let layoutConfigPromise = {}; // Used to resolve layout choice from modal
 let aiLayoutInstructionsText = ''; // Stores user instructions for AI layout
+let currentTourStep = 0;
 
 // --- DOM ELEMENTS ---
 const apiKeyInput = document.getElementById('apiKey');
@@ -51,6 +52,43 @@ const analysisModalOverlay = document.getElementById('analysis-modal-overlay');
 const analysisSummaryContent = document.getElementById('analysis-summary-content');
 const analysisChartContent = document.getElementById('analysis-chart-content');
 const closeAnalysisModalBtn = document.getElementById('close-analysis-modal-btn');
+const tourOverlay = document.getElementById('tour-overlay');
+const tourPopover = document.getElementById('tour-popover');
+const tourTitle = document.getElementById('tour-title');
+const tourText = document.getElementById('tour-text');
+const tourStepCounter = document.getElementById('tour-step-counter');
+const tourPrevBtn = document.getElementById('tour-prev');
+const tourNextBtn = document.getElementById('tour-next');
+
+
+// --- TOUR DEFINITION ---
+const tourSteps = [
+    {
+        elementId: 'tour-step-1',
+        title: 'Boas-vindas!',
+        text: 'Este é o cabeçalho. O primeiro passo é sempre carregar seu arquivo de dados clicando em "Carregar CSV".'
+    },
+    {
+        elementId: 'tour-step-2',
+        title: 'Chave da API',
+        text: 'Insira sua chave da API Gemini aqui. Ela é essencial para ativar todas as funcionalidades de inteligência artificial, como validação e análise.'
+    },
+    {
+        elementId: 'tour-step-3',
+        title: 'Grade de Dados',
+        text: 'Seus dados do CSV aparecerão aqui. Você pode clicar em qualquer célula para editar as informações diretamente.'
+    },
+    {
+        elementId: 'tour-step-4',
+        title: 'Pré-visualização do Documento',
+        text: 'A pré-visualização do seu documento, seja com um modelo ou gerada por IA, será exibida nesta área.'
+    },
+    {
+        elementId: 'tour-step-5',
+        title: 'Controles da IA',
+        text: 'Depois de carregar os dados e configurar um layout, use os botões na barra lateral para executar validações e análises com a IA.'
+    }
+];
 
 
 // --- INITIALIZATION ---
@@ -62,8 +100,13 @@ function initializeApp() {
     ai = new GoogleGenAI({ apiKey });
     console.log("API Key loaded from session.");
   }
+  
   addEventListeners();
   updateButtonStates();
+  
+  if (!sessionStorage.getItem('tourShown')) {
+      startTour();
+  }
 }
 
 // --- EVENT LISTENERS ---
@@ -86,6 +129,8 @@ function addEventListeners() {
   applyTransformRulesBtn.addEventListener('click', handleApplyTransformRules);
   generateAnalysisBtn.addEventListener('click', handleGenerateAnalysis);
   closeAnalysisModalBtn.addEventListener('click', () => analysisModalOverlay.style.display = 'none');
+  tourNextBtn.addEventListener('click', nextTourStep);
+  tourPrevBtn.addEventListener('click', prevTourStep);
 }
 
 // --- HANDLER FUNCTIONS ---
@@ -1047,6 +1092,93 @@ function renderBarChart(chartData) {
         rowEl.appendChild(barContainerEl);
         analysisChartContent.appendChild(rowEl);
     });
+}
+
+
+// --- TOUR LOGIC ---
+function startTour() {
+    currentTourStep = 0;
+    tourOverlay.style.display = 'block';
+    showTourStep(currentTourStep);
+}
+
+function endTour() {
+    const currentElement = document.getElementById(tourSteps[currentTourStep].elementId);
+    currentElement?.classList.remove('tour-highlight');
+    tourOverlay.style.display = 'none';
+    sessionStorage.setItem('tourShown', 'true');
+}
+
+function nextTourStep() {
+    if (currentTourStep < tourSteps.length - 1) {
+        currentTourStep++;
+        showTourStep(currentTourStep);
+    } else {
+        endTour();
+    }
+}
+
+function prevTourStep() {
+    if (currentTourStep > 0) {
+        currentTourStep--;
+        showTourStep(currentTourStep);
+    }
+}
+
+function showTourStep(stepIndex) {
+    // Remove highlight from previous step
+    if (stepIndex > 0) {
+        document.getElementById(tourSteps[stepIndex - 1].elementId)?.classList.remove('tour-highlight');
+    }
+    if (stepIndex < tourSteps.length -1 ) {
+         document.getElementById(tourSteps[stepIndex + 1].elementId)?.classList.remove('tour-highlight');
+    }
+
+
+    const step = tourSteps[stepIndex];
+    const targetElement = document.getElementById(step.elementId);
+
+    if (!targetElement) {
+        console.error(`Tour element not found: ${step.elementId}`);
+        endTour();
+        return;
+    }
+
+    targetElement.classList.add('tour-highlight');
+    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+
+    tourTitle.textContent = step.title;
+    tourText.textContent = step.text;
+    tourStepCounter.textContent = `${stepIndex + 1} de ${tourSteps.length}`;
+    
+    // Position popover
+    const targetRect = targetElement.getBoundingClientRect();
+    const popoverRect = tourPopover.getBoundingClientRect();
+    
+    let top = targetRect.bottom + 15;
+    let left = targetRect.left + (targetRect.width / 2) - (popoverRect.width / 2);
+    
+    // Adjust if it overflows
+    if (top + popoverRect.height > window.innerHeight) {
+        top = targetRect.top - popoverRect.height - 15;
+    }
+    if (left < 10) {
+        left = 10;
+    }
+    if (left + popoverRect.width > window.innerWidth) {
+        left = window.innerWidth - popoverRect.width - 10;
+    }
+
+    tourPopover.style.top = `${top}px`;
+    tourPopover.style.left = `${left}px`;
+    
+    // Update buttons
+    tourPrevBtn.style.display = stepIndex === 0 ? 'none' : 'inline-block';
+    if (stepIndex === tourSteps.length - 1) {
+        tourNextBtn.textContent = 'Concluir';
+    } else {
+        tourNextBtn.textContent = 'Próximo';
+    }
 }
 
 

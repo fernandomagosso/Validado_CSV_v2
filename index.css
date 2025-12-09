@@ -668,3 +668,67 @@ textarea {
 .toast.error {
     background-color: var(--error-color);
 }
+
+/* --- Tour Styles --- */
+#tour-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    z-index: 2000;
+}
+
+.tour-highlight {
+    position: relative;
+    z-index: 2001;
+    box-shadow: 0 0 0 4px var(--primary-color), 0 0 20px 10px rgba(0, 122, 204, 0.5);
+    transition: box-shadow 0.3s ease-in-out;
+    border-radius: var(--border-radius);
+}
+
+#tour-popover {
+    position: absolute;
+    background-color: var(--surface-color);
+    padding: 1.5rem;
+    border-radius: var(--border-radius);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+    width: 350px;
+    max-width: 90vw;
+    z-index: 2002;
+    border: 1px solid var(--border-color);
+}
+
+#tour-title {
+    color: var(--text-color-light);
+    margin-bottom: 1rem;
+}
+
+#tour-text {
+    line-height: 1.6;
+    margin-bottom: 1.5rem;
+}
+
+.tour-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid var(--border-color);
+    padding-top: 1rem;
+    margin-top: 1rem;
+}
+
+#tour-step-counter {
+    font-size: 0.85rem;
+    color: var(--secondary-color);
+}
+
+.tour-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.tour-buttons .btn {
+    padding: 0.5rem 1rem;
+}

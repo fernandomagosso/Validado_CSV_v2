@@ -22,7 +22,7 @@
 </head>
   <body>
     <div id="root">
-      <header class="app-header">
+      <header class="app-header" id="tour-step-1">
         <h1 class="header-title">Processador de Documentos</h1>
         <div class="header-actions">
           <label for="csvFile" class="btn btn-secondary">Carregar CSV</label>
@@ -42,7 +42,7 @@
           
           <section class="control-section" id="api-section">
             <label for="apiKey">Chave da API Gemini</label>
-            <div class="api-input-group">
+            <div class="api-input-group" id="tour-step-2">
               <input type="password" id="apiKey" placeholder="Insira sua chave API">
               <button id="saveApiKey" class="btn btn-secondary">Salvar</button>
             </div>
@@ -70,7 +70,7 @@
 
         <main class="main-content">
           <div id="main-view-container" class="split-view">
-              <div id="data-grid-container" class="panel">
+              <div id="data-grid-container" class="panel" id="tour-step-3">
                   <div class="panel-header">
                       <h3>Dados Editáveis</h3>
                   </div>
@@ -85,7 +85,7 @@
                       </table>
                   </div>
               </div>
-              <div id="doc-preview-container" class="panel">
+              <div id="doc-preview-container" class="panel" id="tour-step-4">
                   <div class="panel-header">
                       <h3>Pré-visualização do Documento</h3>
                       <button id="changeModeBtn" class="btn btn-secondary" style="display: none;">Alterar Modo</button>
@@ -107,7 +107,7 @@
                   </div>
               </div>
           </div>
-          <div id="ai-output-container" class="ai-output-container" style="display: none;">
+          <div id="ai-output-container" class="ai-output-container" style="display: none;" id="tour-step-5">
               <h3>Análise da IA</h3>
               <div id="ai-output-content"></div>
           </div>
@@ -181,6 +181,23 @@
                 <button id="close-analysis-modal-btn" class="btn btn-secondary">Fechar</button>
             </div>
         </div>
+      </div>
+      
+      <!-- Tour Guiado -->
+      <div id="tour-overlay" style="display: none;">
+          <div id="tour-popover">
+              <div id="tour-content">
+                  <h4 id="tour-title"></h4>
+                  <p id="tour-text"></p>
+              </div>
+              <div class="tour-footer">
+                  <span id="tour-step-counter"></span>
+                  <div class="tour-buttons">
+                      <button id="tour-prev" class="btn btn-secondary">Anterior</button>
+                      <button id="tour-next" class="btn">Próximo</button>
+                  </div>
+              </div>
+          </div>
       </div>
 
       <div id="toast-container"></div>
