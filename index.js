@@ -176,6 +176,8 @@ function handleBulkPreviewClick() {
     previewMode = 'bulk';
     showLayoutConfigModal().then(success => {
         if(success) renderBulkPreview();
+    }).catch(err => {
+        console.warn("Layout configuration failed or was cancelled.", err);
     });
 }
 
@@ -194,6 +196,8 @@ function handleRowClick(rowIndex, renderPreview = true) {
       if (!layoutMode) {
            showLayoutConfigModal().then(success => {
               if(success) renderSinglePreview(rowIndex);
+          }).catch(err => {
+              console.warn("Layout configuration failed or was cancelled.", err);
           });
       } else {
           renderSinglePreview(rowIndex);
@@ -206,7 +210,7 @@ function handleLayoutChoice(choice, event = null) {
     if (choice === 'ai') {
         if (!ai) {
             showToast('Por favor, salve sua chave da API Gemini primeiro.', 'error');
-            layoutConfigPromise.reject?.();
+            layoutConfigPromise.reject?.(new Error("API key not set"));
             return;
         }
         layoutMode = 'ai';
@@ -216,7 +220,7 @@ function handleLayoutChoice(choice, event = null) {
     } else if (choice === 'template') {
         const file = event.target.files[0];
         if (!file) {
-            layoutConfigPromise.reject?.();
+            layoutConfigPromise.reject?.(new Error("No file selected"));
             return;
         };
 
@@ -227,7 +231,12 @@ function handleLayoutChoice(choice, event = null) {
             console.log("Template file loaded.");
             showToast('Arquivo de modelo carregado.');
             layoutConfigModalOverlay.style.display = 'none';
-            await startFieldMappingProcess(); // This resolves the promise on its own
+            // startFieldMappingProcess resolves/rejects the promise on its own
+            startFieldMappingProcess(); 
+        };
+        reader.onerror = (err) => {
+            showToast('Falha ao ler o arquivo.', 'error');
+            layoutConfigPromise.reject?.(err);
         };
         reader.readAsArrayBuffer(file);
         event.target.value = ''; // Reset input
@@ -507,12 +516,12 @@ async function handleDownloadZip() {
     showToast('Iniciando a geração dos documentos...');
 
     try {
-        const zip = new JSZip();
+        const zip = new window.PizZip();
         for (let i = 0; i < csvData.length; i++) {
             const row = csvData[i];
             const mappedData = getMappedData(row);
 
-            const doc = new docxtemplater(new window.PizZip(templateFileContent), {
+            const doc = new window.Docxtemplater(new window.PizZip(templateFileContent), {
                 paragraphLoop: true,
                 linebreaks: true,
             });
@@ -698,7 +707,7 @@ async function renderBulkPreview() {
 async function startFieldMappingProcess() {
     if (!ai) {
         showToast('A chave da API Gemini é necessária para o mapeamento inteligente.', 'error');
-        layoutConfigPromise.reject?.();
+        layoutConfigPromise.reject?.(new Error("API key not set"));
         return;
     }
     mappingModalOverlay.style.display = 'flex';
@@ -718,16 +727,23 @@ async function startFieldMappingProcess() {
         showMappingModal(placeholders, csvHeaders, aiSuggestions);
 
     } catch (error) {
-        handleApiError(error);
-        mappingFormContainer.innerHTML = `<p style="color: var(--error-color);">Ocorreu um erro ao se comunicar com a IA.</p>`;
-        layoutConfigPromise.reject?.();
+        if (error instanceof Error) {
+            // Handle specific errors from our code
+            console.error("File Processing Error:", error);
+            showToast(error.message, 'error');
+        } else {
+            // Handle generic or API errors
+            handleApiError(error);
+        }
+        mappingModalOverlay.style.display = 'none';
+        layoutConfigPromise.reject?.(error);
     }
 }
 
 function extractPlaceholdersFromDoc(fileBuffer) {
     try {
         const zip = new window.PizZip(fileBuffer);
-        const doc = new docxtemplater(zip, {
+        const doc = new window.Docxtemplater(zip, {
             paragraphLoop: true,
             linebreaks: true,
         });
@@ -768,22 +784,18 @@ async function getAiFieldMapping(placeholders, headers) {
         }, {}),
     };
     
-    try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: schema,
-                temperature: 0.1,
-                systemInstruction: "Você é um especialista em UX com foco em frontend, especialista em mapeamento de dados. Retorne apenas o JSON solicitado.",
-            },
-        });
-        return JSON.parse(response.text);
-    } catch(error) {
-        console.error("AI Mapping Error:", error);
-        throw error; // Re-throw original error to be handled by the caller
-    }
+    // This function can throw an API error, which will be caught by startFieldMappingProcess
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: schema,
+            temperature: 0.1,
+            systemInstruction: "Você é um especialista em UX com foco em frontend, especialista em mapeamento de dados. Retorne apenas o JSON solicitado.",
+        },
+    });
+    return JSON.parse(response.text);
 }
 
 function showMappingModal(placeholders, headers, suggestions) {
@@ -922,7 +934,7 @@ async function getPreviewHtml(row) {
     if (layoutMode === 'template' && templateFileContent) {
         try {
             const mappedData = getMappedData(row);
-            const doc = new docxtemplater(new window.PizZip(templateFileContent), {
+            const doc = new window.Docxtemplater(new window.PizZip(templateFileContent), {
                 paragraphLoop: true,
                 linebreaks: true,
             });
