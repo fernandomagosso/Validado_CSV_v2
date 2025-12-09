@@ -21,7 +21,7 @@ let aiPreviewCache = new Map();
 const apiKeyInput = document.getElementById('apiKey');
 const saveApiKeyBtn = document.getElementById('saveApiKey');
 const csvFileInput = document.getElementById('csvFile');
-const runAiBtn = document.getElementById('runAi');
+const runAllAiBtn = document.getElementById('runAllAiBtn');
 const downloadCsvBtn = document.getElementById('downloadCsv');
 const downloadDocBtn = document.getElementById('downloadDoc');
 const clearDataBtn = document.getElementById('clearDataBtn');
@@ -137,7 +137,7 @@ function addEventListeners() {
     useAiLayoutBtn.addEventListener('click', () => handleLayoutChoice('ai'));
     useHtmlTemplateBtn.addEventListener('click', () => handleLayoutChoice('html'));
     changeModeBtn.addEventListener('click', handleChangeMode);
-    runAiBtn.addEventListener('click', handleAiValidation);
+    runAllAiBtn.addEventListener('click', handleAiValidation);
     downloadCsvBtn.addEventListener('click', handleDownloadCsv);
     downloadDocBtn.addEventListener('click', handleDownloadZip);
     clearDataBtn.addEventListener('click', handleClearData);
@@ -301,14 +301,13 @@ function updateButtonStates() {
     const hasData = csvData.length > 0;
     const hasApiKey = !!apiKey;
     const hasLayout = !!layoutMode;
-    const rowSelected = activeRowIndex !== null;
 
     clearDataBtn.disabled = !hasData;
     clearLayoutBtn.disabled = !hasLayout;
     downloadCsvBtn.disabled = !hasData;
     downloadDocBtn.disabled = !hasData || !hasLayout;
     generateAnalysisBtn.disabled = !hasData || !hasApiKey;
-    runAiBtn.disabled = !hasData || !hasApiKey || !rowSelected;
+    runAllAiBtn.disabled = !hasData || !hasApiKey;
     
     if (hasData) {
         welcomeMessage.style.display = 'none';
@@ -325,7 +324,7 @@ function handleApiError(error, button) {
     console.error("Gemini API Error:", error);
     let userMessage = "Ocorreu um erro na chamada da API.";
     if (error.message && error.message.includes('429')) {
-        userMessage = "Limite de requisições da API atingido. Tente novamente em um minuto.";
+        userMessage = "Limite de requisições da API atingido. Tente novamente mais tarde.";
     } else if (error.message) {
         userMessage = `Erro da API: ${error.message.substring(0, 100)}`;
     }
@@ -425,10 +424,7 @@ async function generatePreviewWithAI(rowData, rowIndex) {
     `;
 
     try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-        });
+        const response = await callGeminiWithRetry(prompt);
         return response.text;
     } catch (error) {
         handleApiError(error);
@@ -448,46 +444,105 @@ function generatePreviewWithHtmlTemplate(rowData) {
 
 // --- AI FEATURES ---
 
-async function handleAiValidation() {
-    if (activeRowIndex === null || !ai) return;
-
-    runAiBtn.classList.add('btn-loading');
-    runAiBtn.disabled = true;
-
-    const rowData = csvData[activeRowIndex];
-    const prompt = `
-        Você é um assistente de validação de dados. Analise esta linha de dados de um CSV:
-        ${JSON.stringify(rowData, null, 2)}
-        
-        Com base nesses dados, identifique possíveis erros, inconsistências ou campos que precisam de atenção.
-        Seja conciso e direto. Retorne APENAS uma lista de problemas em formato JSON.
-        O JSON deve ser um array de objetos, onde cada objeto tem duas chaves: "field" (o nome da coluna com problema) e "issue" (a descrição do problema).
-        Se nenhum problema for encontrado, retorne um array vazio [].
-        
-        Exemplo de saída com erros:
-        [
-          {"field": "CPF", "issue": "O CPF parece ser inválido ou está mal formatado."},
-          {"field": "data_nascimento", "issue": "O formato da data é inconsistente."}
-        ]
-
-        Exemplo de saída sem erros:
-        []
-    `;
-
-    try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: { responseMimeType: "application/json" }
-        });
-        const validationResult = JSON.parse(response.text);
-        displayValidationResults(validationResult);
-    } catch (error) {
-        handleApiError(error, runAiBtn);
-    } finally {
-        runAiBtn.classList.remove('btn-loading');
-        runAiBtn.disabled = false;
+async function callGeminiWithRetry(prompt, config = {}, maxRetries = 3, initialDelay = 1000) {
+    let lastError = null;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: prompt,
+                config: config,
+            });
+            return response;
+        } catch (error) {
+            lastError = error;
+            console.warn(`API call attempt ${attempt + 1} failed.`, error);
+            // Check for rate limit error (e.g., HTTP 429)
+            if (error.message && error.message.includes('429')) {
+                if (attempt < maxRetries - 1) {
+                    const delay = initialDelay * Math.pow(2, attempt) + Math.random() * 1000;
+                    showToast(`Limite de requisições atingido. Tentando novamente em ${Math.round(delay / 1000)}s...`, 'error');
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            } else {
+                // For other errors, don't retry
+                break;
+            }
+        }
     }
+    throw lastError;
+}
+
+async function handleAiValidation() {
+    if (!ai || csvData.length === 0) return;
+
+    const BATCH_SIZE = 5;
+    const totalRows = csvData.length;
+    let processedRows = 0;
+    let allValidationResults = [];
+
+    runAllAiBtn.classList.add('btn-loading');
+    runAllAiBtn.disabled = true;
+    
+    document.querySelectorAll('.invalid-field').forEach(el => {
+        el.classList.remove('invalid-field');
+        delete el.dataset.tooltip;
+    });
+
+    for (let i = 0; i < totalRows; i += BATCH_SIZE) {
+        const batch = csvData.slice(i, i + BATCH_SIZE).map((rowData, index) => ({
+            rowIndex: i + index,
+            data: rowData
+        }));
+        
+        runAllAiBtn.textContent = `Validando ${processedRows}/${totalRows}...`;
+
+        const prompt = `
+            Você é um assistente de validação de dados. Analise o seguinte array de objetos, onde cada objeto contém dados de uma linha de CSV e seu índice original.
+            Dados de entrada:
+            ${JSON.stringify(batch, null, 2)}
+            
+            Para cada objeto no array, identifique possíveis erros, inconsistências ou campos que precisam de atenção.
+            Retorne APENAS um objeto JSON com uma única chave "results". O valor de "results" deve ser um array de objetos.
+            Cada objeto neste array de resultados DEVE corresponder a um objeto de entrada e conter duas chaves:
+            1. "rowIndex": o índice original da linha que você analisou.
+            2. "errors": um array de objetos de erro para aquela linha. Cada objeto de erro deve ter as chaves "field" (o nome da coluna com problema) e "issue" (a descrição do problema). Se uma linha não tiver erros, o array "errors" deve ser vazio.
+
+            Exemplo de saída esperada:
+            {
+              "results": [
+                {
+                  "rowIndex": 0,
+                  "errors": [{"field": "CPF", "issue": "O CPF parece ser inválido."}]
+                },
+                {
+                  "rowIndex": 1,
+                  "errors": []
+                }
+              ]
+            }
+        `;
+
+        try {
+            const response = await callGeminiWithRetry(prompt, { responseMimeType: "application/json" });
+            const validationBatchResult = JSON.parse(response.text);
+            if (validationBatchResult.results) {
+                 allValidationResults.push(...validationBatchResult.results);
+            } else {
+                console.warn("AI response for batch did not contain 'results' key.", validationBatchResult);
+            }
+            processedRows += batch.length;
+        } catch (error) {
+            handleApiError(error, runAllAiBtn);
+            runAllAiBtn.textContent = 'Validar Tudo';
+            return;
+        }
+    }
+
+    displayBulkValidationResults(allValidationResults);
+    runAllAiBtn.classList.remove('btn-loading');
+    runAllAiBtn.disabled = false;
+    runAllAiBtn.textContent = 'Validar Tudo';
 }
 
 async function handleGenerateAnalysis() {
@@ -517,11 +572,7 @@ async function handleGenerateAnalysis() {
     `;
 
     try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: { responseMimeType: "application/json" }
-        });
+        const response = await callGeminiWithRetry(prompt, { responseMimeType: "application/json" });
         const analysis = JSON.parse(response.text);
         displayAnalysisModal(analysis);
     } catch (error) {
@@ -532,31 +583,40 @@ async function handleGenerateAnalysis() {
     }
 }
 
-function displayValidationResults(results) {
-    // Clear previous highlights
-    document.querySelectorAll('.invalid-field').forEach(el => {
-        el.classList.remove('invalid-field');
-        delete el.dataset.tooltip;
-    });
+function displayBulkValidationResults(results) {
+    let totalIssues = 0;
+    let rowsWithIssues = new Set();
 
-    if (results.length === 0) {
-        showToast('Nenhum problema encontrado!', 'success');
+    if (!results || results.length === 0) {
+        showToast('Validação concluída. Nenhum problema encontrado!', 'success');
         return;
     }
 
-    showToast(`${results.length} problema(s) de validação encontrado(s).`, 'error');
-
-    const activeRowElement = document.querySelector(`tr[data-row-index='${activeRowIndex}']`);
-    if (!activeRowElement) return;
-
     results.forEach(item => {
-        const headerIndex = csvHeaders.indexOf(item.field);
-        if (headerIndex !== -1) {
-            const cell = activeRowElement.cells[headerIndex];
-            cell.classList.add('invalid-field');
-            cell.dataset.tooltip = item.issue;
+        if (item.errors && item.errors.length > 0) {
+            rowsWithIssues.add(item.rowIndex);
+            const rowElement = document.querySelector(`tr[data-row-index='${item.rowIndex}']`);
+            if (rowElement) {
+                item.errors.forEach(error => {
+                    totalIssues++;
+                    const headerIndex = csvHeaders.indexOf(error.field);
+                    if (headerIndex !== -1) {
+                        const cell = rowElement.cells[headerIndex];
+                        if(cell) {
+                           cell.classList.add('invalid-field');
+                           cell.dataset.tooltip = error.issue;
+                        }
+                    }
+                });
+            }
         }
     });
+
+    if (totalIssues > 0) {
+        showToast(`Validação concluída: ${totalIssues} problema(s) encontrado(s) em ${rowsWithIssues.size} linha(s).`, 'error');
+    } else {
+        showToast('Validação concluída. Nenhum problema encontrado!', 'success');
+    }
 }
 
 
@@ -723,16 +783,23 @@ async function handleDownloadZip() {
     for (let i = 0; i < csvData.length; i++) {
         const rowData = csvData[i];
         let content = '';
-        if (layoutMode === 'ai') {
-            content = await generatePreviewWithAI(rowData, i);
-            if (i < csvData.length - 1) { // Rate limit
-                await new Promise(resolve => setTimeout(resolve, 1100));
+        try {
+            if (layoutMode === 'ai') {
+                content = await generatePreviewWithAI(rowData, i);
+                if (i < csvData.length - 1) { // Rate limit
+                    await new Promise(resolve => setTimeout(resolve, 1100));
+                }
+            } else {
+                content = generatePreviewWithHtmlTemplate(rowData);
             }
-        } else {
-            content = generatePreviewWithHtmlTemplate(rowData);
+            const fullHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Documento ${i+1}</title></head><body>${content}</body></html>`;
+            zip.file(`documento_${i + 1}.html`, fullHtml);
+        } catch (error) {
+             // Error is already handled by generatePreviewWithAI, just log and continue
+             console.error(`Skipping document ${i+1} due to error.`);
+             zip.file(`ERRO_documento_${i + 1}.txt`, `Falha ao gerar este documento. Erro: ${error.message}`);
+             break; // Stop further processing on API error
         }
-        const fullHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Documento ${i+1}</title></head><body>${content}</body></html>`;
-        zip.file(`documento_${i + 1}.html`, fullHtml);
     }
 
     const zipContent = zip.generate({ type: "blob" });
