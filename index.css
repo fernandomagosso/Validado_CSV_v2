@@ -165,6 +165,54 @@ textarea {
     flex-shrink: 0;
 }
 
+.btn.btn-loading {
+    cursor: wait;
+    position: relative;
+    color: transparent !important;
+}
+
+.btn.btn-loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 16px;
+    height: 16px;
+    margin-top: -8px;
+    margin-left: -8px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+.btn.btn-disabled-error {
+    background-color: var(--error-color);
+    cursor: not-allowed;
+    opacity: 0.9;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.sidebar-button-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+}
+
+.sidebar .btn {
+    padding: 0.6rem 0.8rem;
+    font-size: 0.85rem;
+}
+
+#ai-transform-rules-section .btn {
+    margin-top: 0.75rem;
+}
+
 .main-content {
   flex: 1;
   padding: 2rem;
@@ -445,6 +493,27 @@ textarea {
     max-height: 80vh;
     display: flex;
     flex-direction: column;
+    position: relative;
+}
+
+.modal-close-btn {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    background: none;
+    border: none;
+    color: var(--secondary-color);
+    font-size: 2.2rem;
+    font-weight: 300;
+    line-height: 1;
+    cursor: pointer;
+    transition: color 0.2s;
+    padding: 0;
+    z-index: 10;
+}
+
+.modal-close-btn:hover {
+    color: var(--text-color-light);
 }
 
 .modal-content.large {
@@ -637,6 +706,7 @@ textarea {
     opacity: 0;
     transform: translateX(100%);
     animation: slideIn 0.3s forwards;
+    line-height: 1.5;
 }
 
 @keyframes slideIn {
@@ -669,6 +739,16 @@ textarea {
     background-color: var(--error-color);
 }
 
+.toast a {
+    color: var(--text-color-light);
+    text-decoration: underline;
+    font-weight: 500;
+}
+
+.toast a:hover {
+    opacity: 0.8;
+}
+
 /* --- Tour Styles --- */
 #tour-overlay {
     position: fixed;
@@ -698,6 +778,12 @@ textarea {
     max-width: 90vw;
     z-index: 2002;
     border: 1px solid var(--border-color);
+    position: relative;
+}
+
+.tour-close-btn {
+    top: 8px;
+    right: 12px;
 }
 
 #tour-title {
